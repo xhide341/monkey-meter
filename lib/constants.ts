@@ -16,7 +16,7 @@ export const TIME_WINDOWS = {
 } as const;
 
 /** Aggregation loop interval in minutes (chrome.alarms minimum is 0.5 in dev) */
-export const AGGREGATION_ALARM_MINUTES = 0.5;
+export const AGGREGATION_ALARM_MINUTES = 1.0;
 
 /** Exponential Moving Average alpha (0–1); higher = more responsive to recent data */
 export const EMA_ALPHA = 0.3;

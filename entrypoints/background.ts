@@ -25,6 +25,7 @@ import {
   OVERLAY_COOLDOWN_MS,
   IDLE_DETECTION_THRESHOLD_SECONDS,
   AUTO_END_IDLE_MS,
+  DWELL_DRIFT_MIN_MS,
 } from "@/lib/constants";
 import type { BehavioralEvent, ExtensionMessage, LogEntry } from "@/lib/types";
 
@@ -541,7 +542,7 @@ export default defineBackground(() => {
       const dwellMs = Math.max(0, totalMs - pausedMs);
       const isEducational = educationalDomains.has(activeTab.domain);
 
-      if (!isEducational && dwellMs >= 30000) {
+      if (!isEducational && dwellMs >= DWELL_DRIFT_MIN_MS) {
         // Only if at least 30s of active time
         const interimEvent = trackDwellDrift(activeTab.domain, dwellMs);
         if (interimEvent) {
@@ -583,9 +584,12 @@ export default defineBackground(() => {
 
     await saveSession(session);
 
-    // Update badge with current 5m score (most responsive window)
-    const fiveMinScore = session.scores.find((s) => s.window === "5m");
-    const badgeText = fiveMinScore ? `${fiveMinScore.score}` : "0";
+    // Update badge with smoothed score (consistent with popup dashboard)
+    const badgeFocusScore = Math.max(
+      0,
+      Math.min(100, 100 - Math.round(session.smoothedScore)),
+    );
+    const badgeText = `${badgeFocusScore}`;
     const display = getStateDisplay(newState);
 
     console.log(

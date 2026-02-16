@@ -217,14 +217,41 @@ function renderDashboard(
   timerInterval = setInterval(() => updateTimer(sessionStartedAt), 1_000);
 
   // Render sparkline from persisted focusTimeline (survives popup reopens)
-  renderSparkline(focusTimeline);
+  // Setup interaction: Clone canvas to remove old listeners, then re-bind
+  const canvas = document.getElementById("sparkline") as HTMLCanvasElement;
+  if (canvas) {
+    const newCanvas = canvas.cloneNode(true) as HTMLCanvasElement;
+    canvas.parentNode?.replaceChild(newCanvas, canvas);
+
+    // Initial draw on the fresh canvas
+    renderSparkline(focusTimeline);
+
+    newCanvas.addEventListener("mousemove", (e) => {
+      const rect = newCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const w = rect.width;
+      const padding = 4; // match renderSparkline padding
+
+      if (focusTimeline.length < 2) return;
+
+      const stepX = (w - 2 * padding) / (focusTimeline.length - 1);
+      let index = Math.round((x - padding) / stepX);
+      index = Math.max(0, Math.min(focusTimeline.length - 1, index));
+
+      renderSparkline(focusTimeline, index);
+    });
+
+    newCanvas.addEventListener("mouseleave", () => {
+      renderSparkline(focusTimeline, null);
+    });
+  }
 }
 
 /** Update the session timer display with real-time M:SS or H:MM:SS */
 function updateTimer(sessionStartedAt: number) {
-  const timerEl = document.getElementById("session-timer")!;
+  const timerEl = document.getElementById("session-timer-display")!;
   const elapsed = Date.now() - sessionStartedAt;
-  timerEl.textContent = `⏱ ${formatSessionTimer(elapsed)}`;
+  timerEl.textContent = formatSessionTimer(elapsed);
 }
 
 /** Render the activity log tab with human-readable entries and per-entry weight */
@@ -251,7 +278,13 @@ function renderActivityLog(activityLog: LogEntry[]) {
     row.className = "log-entry";
 
     // Drift events get a highlighted style
-    if (entry.type !== "navigation") {
+    // Exclude basic state changes like idle/resume/end from the "drift" warning color
+    if (
+      entry.type !== "navigation" &&
+      entry.type !== "idle" &&
+      entry.type !== "resume" &&
+      entry.type !== "session_end"
+    ) {
       row.classList.add("log-entry--drift");
     }
 
@@ -283,15 +316,34 @@ function escapeHtml(text: string): string {
 }
 
 /** Draw the session sparkline from persisted focusTimeline data */
-function renderSparkline(data: number[]) {
+/** Draw the session sparkline from persisted focusTimeline data */
+function renderSparkline(data: number[], highlightIndex: number | null = null) {
   const canvas = document.getElementById("sparkline") as HTMLCanvasElement;
-  if (!canvas) return;
+  const tooltip = document.getElementById("chart-tooltip");
+  if (!canvas || !tooltip) return;
+
+  // Handle High DPI scaling
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+
+  // Resize canvas if needed to match display size * pixel ratio
+  if (
+    canvas.width !== rect.width * dpr ||
+    canvas.height !== rect.height * dpr
+  ) {
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+  }
 
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const w = canvas.width;
-  const h = canvas.height;
+  // Reset transform to avoid accumulation, then scale
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
   const padding = 4;
 
   ctx.clearRect(0, 0, w, h);
@@ -304,50 +356,119 @@ function renderSparkline(data: number[]) {
     ctx.moveTo(padding, h / 2);
     ctx.lineTo(w - padding, h / 2);
     ctx.stroke();
+    tooltip.style.opacity = "0";
     return;
   }
 
   const max = Math.max(...data, 100);
   const stepX = (w - 2 * padding) / (data.length - 1);
 
-  // Gradient fill under the line
+  // Helper to get coordinates for a data point
+  const getPoint = (index: number) => {
+    const x = padding + index * stepX;
+    const y = h - padding - (data[index] / max) * (h - 2 * padding);
+    return { x, y };
+  };
+
+  // Generate path points
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i < data.length; i++) {
+    points.push(getPoint(i));
+  }
+
+  // Draw smooth curve using Catmull-Rom to Cubic Bezier conversion
+  const drawSmoothPath = (context: CanvasRenderingContext2D) => {
+    if (points.length < 2) return;
+
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? 0 : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2] || p2; // Duplicate last point if we run off end
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      context.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+  };
+
+  // Gradient fill
   const gradient = ctx.createLinearGradient(0, 0, 0, h);
   gradient.addColorStop(0, "rgba(251, 146, 60, 0.3)");
   gradient.addColorStop(1, "rgba(251, 146, 60, 0)");
 
-  ctx.beginPath();
-  ctx.moveTo(padding, h - padding);
-  for (let i = 0; i < data.length; i++) {
-    const x = padding + i * stepX;
-    const y = h - padding - (data[i] / max) * (h - 2 * padding);
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(padding + (data.length - 1) * stepX, h - padding);
+  drawSmoothPath(ctx);
+  const last = points[points.length - 1];
+  const first = points[0];
+  ctx.lineTo(last.x, h - padding);
+  ctx.lineTo(first.x, h - padding);
   ctx.closePath();
   ctx.fillStyle = gradient;
   ctx.fill();
 
   // Line stroke
-  ctx.beginPath();
-  for (let i = 0; i < data.length; i++) {
-    const x = padding + i * stepX;
-    const y = h - padding - (data[i] / max) * (h - 2 * padding);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
+  drawSmoothPath(ctx);
   ctx.strokeStyle = "#fb923c";
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.stroke();
 
-  // Dot on the latest point
-  const lastX = padding + (data.length - 1) * stepX;
-  const lastY = h - padding - (data[data.length - 1] / max) * (h - 2 * padding);
+  // Active point (either explicit highlight or latest)
+  const activeIndex =
+    highlightIndex !== null ? highlightIndex : data.length - 1;
+  const activePoint = getPoint(activeIndex);
+
+  // If highlighting, draw vertical cursor line
+  if (highlightIndex !== null) {
+    ctx.beginPath();
+    ctx.moveTo(activePoint.x, padding);
+    ctx.lineTo(activePoint.x, h - padding);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw dot
   ctx.beginPath();
-  ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+  ctx.arc(activePoint.x, activePoint.y, 4, 0, Math.PI * 2);
   ctx.fillStyle = "#fb923c";
   ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#1e2433";
+  ctx.stroke();
+
+  // Update Tooltip
+  if (highlightIndex !== null) {
+    const score = Math.round(data[highlightIndex]);
+    // Approximate time: 30s intervals per point, ending at "now"
+    const msAgo = (data.length - 1 - highlightIndex) * 60_000;
+    const time = new Date(Date.now() - msAgo).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    tooltip.innerHTML = `
+      <span class="tooltip-score">${score}%</span>
+      <span class="tooltip-time">${time}</span>
+    `;
+    tooltip.style.transform = `translateX(-50%)`;
+    // Position tooltip above the point usually, but clamp to container
+    // Using simple left positioning based on point x + offset
+    tooltip.style.left = `${activePoint.x}px`;
+    tooltip.style.opacity = "1";
+  } else {
+    tooltip.style.opacity = "0";
+  }
 }
 
 // ── URL detection helpers for smart activity labels ──

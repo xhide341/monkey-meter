@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MonkeyMeter</title>
+  <title>Monkey Meter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
@@ -17,7 +17,6 @@
     <!-- Header -->
     <header class="popup-header">
       <div class="header-title">
-        <span class="header-icon">🐵</span>
         <h1>Monkey Meter</h1>
       </div>
       <span class="header-subtitle">Autopilot Drift Detector</span>
@@ -33,7 +32,7 @@
     <!-- Start Session Screen (shown when no active session) -->
     <div class="start-screen" id="start-screen">
       <div class="start-content">
-        <div class="start-emoji">🐵</div>
+        <!-- <div class="start-emoji">🐵</div> -->
         <h2 class="start-title">Ready to focus?</h2>
         <p class="start-description">
           Start a session to track your browsing focus and see how much the
@@ -60,7 +59,15 @@
           <div class="score-summary" id="score-summary">
             You're fully locked in! 🎯
           </div>
-          <div class="session-timer" id="session-timer">⏱ 0:00</div>
+          <div class="session-timer" id="session-timer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+              class="timer-icon">
+              <path
+                d="M12 13V9M21 6L19 4M10 2H14M12 21C7.58172 21 4 17.4183 4 13C4 8.58172 7.58172 5 12 5C16.4183 5 20 8.58172 20 13C20 17.4183 16.4183 21 12 21Z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span id="session-timer-display">0:00</span>
+          </div>
         </div>
       </section>
 
@@ -80,6 +87,7 @@
       <section class="trend-section">
         <div class="trend-label">Session Trend</div>
         <canvas id="sparkline" width="300" height="48"></canvas>
+        <div id="chart-tooltip" class="chart-tooltip"></div>
       </section>
 
       <!-- End Session Button -->
