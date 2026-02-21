@@ -9,6 +9,7 @@ It watches for autopilot browsing patterns — doom-scrolling through Shorts/Ree
 ## Tech Stack
 
 - [WXT](https://wxt.dev) — next-gen browser extension framework
+- React
 - TypeScript
 - Vanilla CSS
 - Chrome Extensions Manifest V3
@@ -27,7 +28,18 @@ npm run dev:firefox
 
 # Build for production
 npm run build
+
+# Generate an unpackable extension ZIP file
+npm run zip
 ```
+
+## Manual Installation (Unpacked)
+If you don't want to run the dev server, you can manually load the built extension:
+1. Run `npm run zip` to generate a compiled `.zip` file in the `.output` directory.
+2. Unzip the file.
+3. Open your browser's extension page (e.g., `chrome://extensions`).
+4. Enable **Developer Mode**.
+5. Click **Load unpacked** and select the unzipped folder.
 
 ## License
 
