@@ -49,19 +49,17 @@ export function trackShortContent(domain: string, url: string): BehavioralEvent 
 
 /**
  * Create a dwell-drift event when the user spends time on a non-educational site.
- * Weight scales with dwell time: 30s = base weight, 10m = max weight (1.0).
  * Short visits below DWELL_DRIFT_MIN_MS return null (no drift).
+ * Weight scales proportionally with dwell time: 30s → base weight, 10m → max weight (1.0).
  */
 export function trackDwellDrift(domain: string, dwellMs: number): BehavioralEvent | null {
-    // Ignore short visits — user was just checking the site
     if (dwellMs < DWELL_DRIFT_MIN_MS) return null;
 
     const event = createEvent('dwell_drift', domain, { dwellMs });
 
-    // Scale weight proportionally: 30s → base weight, 10m → 1.0
     const dwellRange = DWELL_DRIFT_MAX_MS - DWELL_DRIFT_MIN_MS;
     const clampedDwell = Math.min(dwellMs - DWELL_DRIFT_MIN_MS, dwellRange);
-    const scaleFactor = clampedDwell / dwellRange; // 0 to 1
+    const scaleFactor = clampedDwell / dwellRange;
     event.weight = Math.min(1.0, event.weight + scaleFactor * (1.0 - event.weight));
 
     return event;

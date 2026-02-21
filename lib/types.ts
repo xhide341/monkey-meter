@@ -89,6 +89,12 @@ export interface SessionData {
   sessionStartedAt: number;
   /** Whether the user has an active tracking session */
   isSessionActive: boolean;
+  /** Whether the active session is currently paused (scoring frozen, activity still tracked) */
+  isSessionPaused: boolean;
+  /** Timestamp when session was paused (0 if not paused) */
+  sessionPausedAt: number;
+  /** Total accumulated paused time in ms (across multiple pause/resume cycles) */
+  totalSessionPausedMs: number;
   /** Human-readable activity log for the Activity Log tab */
   activityLog: LogEntry[];
   /** Last score change delta for live points display (e.g. +3, -2) */
@@ -109,4 +115,6 @@ export type ExtensionMessage =
   | { type: "GET_SCORES" }
   | { type: "SCORES_UPDATE"; scores: AutopilotScore[]; state: MonkeyState }
   | { type: "START_SESSION" }
-  | { type: "END_SESSION" };
+  | { type: "END_SESSION" }
+  | { type: "PAUSE_SESSION" }
+  | { type: "RESUME_SESSION" };

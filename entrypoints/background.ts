@@ -19,6 +19,8 @@ import {
   currentActivityItem,
   startSession as storageStartSession,
   endSession as storageEndSession,
+  pauseSession as storagePauseSession,
+  resumeSession as storageResumeSession,
 } from "@/lib/storage";
 import {
   AGGREGATION_ALARM_MINUTES,
@@ -56,7 +58,11 @@ function formatDwellTime(ms: number): string {
   return `${seconds}s`;
 }
 
-/** Generate a smart log message based on URL patterns */
+/**
+ * Generate a smart log message based on URL patterns.
+ * Detects specific platforms like YouTube, TikTok, Instagram Reels, Reddit, and Twitter/X
+ * to classify the navigation type and format a precise message.
+ */
 function getNavigationLogMessage(
   url: string,
   domain: string,
@@ -64,7 +70,6 @@ function getNavigationLogMessage(
 ): { message: string; type: LogEntry["type"] } {
   const suffix = dwellTime ? ` for ${dwellTime}` : "";
   try {
-    // YouTube-specific detection
     if (domain === YOUTUBE_DOMAIN || domain === "youtube.com") {
       if (YOUTUBE_SHORTS_REGEX.test(url)) {
         return {
@@ -78,12 +83,10 @@ function getNavigationLogMessage(
       return { message: `Browsed YouTube${suffix}`, type: "navigation" };
     }
 
-    // TikTok detection
     if (domain.includes("tiktok.com")) {
       return { message: `Scrolled TikTok${suffix}`, type: "short_content" };
     }
 
-    // Instagram Reels detection
     if (domain.includes("instagram.com") && url.includes("/reels")) {
       return {
         message: `Watched Instagram Reels${suffix}`,
@@ -91,17 +94,14 @@ function getNavigationLogMessage(
       };
     }
 
-    // Reddit detection
     if (domain.includes("reddit.com")) {
       return { message: `Browsed Reddit${suffix}`, type: "navigation" };
     }
 
-    // Twitter/X detection
     if (domain.includes("twitter.com") || domain === "x.com") {
       return { message: `Scrolled X (Twitter)${suffix}`, type: "navigation" };
     }
 
-    // Default: "Visited domain"
     return { message: `Visited ${domain}${suffix}`, type: "navigation" };
   } catch {
     return { message: `Visited ${domain}${suffix}`, type: "navigation" };
@@ -117,6 +117,9 @@ export default defineBackground(() => {
   let isUserIdle = false; // True if browser detects system is idle
   let lastPauseTime = 0; // When did we last pause tracking
 
+  // ── In-memory pause flag (avoids async storage reads in hot paths) ──
+  let isSessionPaused = false;
+
   // Domains classified as educational by content script metadata analysis
   const educationalDomains = new Set<string>();
 
@@ -125,11 +128,14 @@ export default defineBackground(() => {
 
   console.log("[MM Background] Service worker initialized");
 
-  // ── Restore session state on service worker restart ──
+  /**
+   * Restore session state on service worker restart.
+   * Loads educational domains, restores pause state, and checks if session is active.
+   * Also initializes active tab tracking to survive restarts.
+   */
   (async () => {
     const session = await loadSession();
 
-    // Restore educational domains from intentional sessions (prevents false drift on restart)
     const now = Date.now();
     for (const [domain, expiry] of Object.entries(
       session.preferences.intentionalSessions,
@@ -142,14 +148,14 @@ export default defineBackground(() => {
       `[MM Background] Restored ${educationalDomains.size} educational domains`,
     );
 
-    // Only initialize tab tracking if session is active
+    isSessionPaused = session.isSessionPaused ?? false;
+
     if (!session.isSessionActive) {
       console.log("[MM Background] No active session — tracking is paused");
       await browser.action.setBadgeText({ text: "" });
       return;
     }
 
-    // ── Initialize activeTab from current browser state (survives SW restarts) ──
     try {
       const [tab] = await browser.tabs.query({
         active: true,
@@ -180,8 +186,12 @@ export default defineBackground(() => {
     }
   })();
 
-  // ── Monitor browser idle state ──
-  // Query idle state every 30 seconds to detect when user is AFK
+  /**
+   * Monitor browser idle state every 30 seconds to detect when user is AFK.
+   * Handles transitioning between active and idle states, including retroactively
+   * adding the idle detection threshold to pausedTime, and checking if session
+   * auto-end threshold is exceeded when resuming.
+   */
   browser.idle.setDetectionInterval(IDLE_DETECTION_THRESHOLD_SECONDS);
 
   browser.idle.onStateChanged.addListener(async (newState) => {
@@ -190,14 +200,18 @@ export default defineBackground(() => {
 
     console.log(`[MM Idle] State changed: ${newState} (idle=${isUserIdle})`);
 
-    // Skip idle handling if no active session
     const session = await loadSession();
     if (!session.isSessionActive) return;
 
-    // If transitioning from active to idle, mark pause time
     if (!wasIdle && isUserIdle && activeTab) {
       lastPauseTime = Date.now();
-      console.log(`[MM Idle] User went idle, pausing drift tracking`);
+
+      const idleThresholdMs = IDLE_DETECTION_THRESHOLD_SECONDS * 1000;
+      const tabOpenDuration = Date.now() - activeTab.startTime;
+      const retroactivePause = Math.min(idleThresholdMs, tabOpenDuration);
+      activeTab.pausedTime += retroactivePause;
+
+      console.log(`[MM Idle] User went idle, retroactive pause added: ${retroactivePause}ms`);
       await pushLog(
         "idle",
         "Idle detected — pausing drift tracking",
@@ -205,11 +219,9 @@ export default defineBackground(() => {
       );
     }
 
-    // If transitioning from idle to active, check for auto-end threshold
     if (wasIdle && !isUserIdle && lastPauseTime > 0) {
       const pausedDuration = Date.now() - lastPauseTime;
 
-      // Auto-end session if idle exceeded 1 hour
       if (pausedDuration >= AUTO_END_IDLE_MS) {
         console.log(
           `[MM Idle] Idle for ${formatDwellTime(pausedDuration)} — auto-ending session`,
@@ -223,7 +235,6 @@ export default defineBackground(() => {
         return;
       }
 
-      // Normal resume — add paused time
       if (activeTab) {
         activeTab.pausedTime += pausedDuration;
         console.log(
@@ -257,8 +268,9 @@ export default defineBackground(() => {
 
   /**
    * Finalize and log the previous active tab's dwell time.
-   * If the tab was on a non-educational domain for 30s+, generate a drift event.
-   * Subtracts time when user was idle.
+   * Subtracts time when user was idle, generates a smart log with dwell duration,
+   * generates a drift event if the tab was on a non-educational domain for 30s+,
+   * or skips scoring if session is paused or visit was very short.
    */
   async function finalizeActiveTab() {
     if (!activeTab) return;
@@ -266,17 +278,14 @@ export default defineBackground(() => {
     const totalMs = Date.now() - activeTab.startTime;
     let pausedMs = activeTab.pausedTime;
 
-    // If currently idle, add the current pause duration
     if (isUserIdle && lastPauseTime > 0) {
       pausedMs += Date.now() - lastPauseTime;
     }
 
-    // Calculate actual active dwell time (total - paused)
     const dwellMs = Math.max(0, totalMs - pausedMs);
     const dwellFormatted = formatDwellTime(dwellMs);
     const { domain, url } = activeTab;
 
-    // Skip very short visits (under 2 seconds — likely just browser chrome or about: pages)
     if (dwellMs < 2000) {
       activeTab = null;
       await currentActivityItem.setValue(null);
@@ -287,11 +296,14 @@ export default defineBackground(() => {
       `[MM Finalize] ${domain}: total=${formatDwellTime(totalMs)}, paused=${formatDwellTime(pausedMs)}, active=${dwellFormatted}`,
     );
 
-    // Generate smart log with dwell duration
     const logInfo = getNavigationLogMessage(url, domain, dwellFormatted);
 
-    // Check if this domain qualifies for drift scoring
-    // Only non-educational, non-intentional domains generate drift events
+    if (isSessionPaused) {
+      await pushLog(logInfo.type, logInfo.message, domain);
+      activeTab = null;
+      return;
+    }
+
     const isEducational = educationalDomains.has(domain);
     const dwellEvent = !isEducational ? trackDwellDrift(domain, dwellMs) : null;
 
@@ -300,10 +312,8 @@ export default defineBackground(() => {
         `[MM Event] dwell_drift on ${domain} (${dwellFormatted}), weight=${dwellEvent.weight.toFixed(2)}`,
       );
       pendingEvents.push(dwellEvent);
-      // Log with weight so UI can show the drift points
       await pushLog(logInfo.type, logInfo.message, domain, dwellEvent.weight);
     } else {
-      // Log without weight (informational only — educational or short visit)
       await pushLog(logInfo.type, logInfo.message, domain);
     }
 
@@ -335,6 +345,10 @@ export default defineBackground(() => {
         tab.url.startsWith("chrome-extension://") ||
         tab.url.startsWith("edge://")
       ) {
+        // We already called finalizeActiveTab() above, so previous tab is done.
+        // But we explicitly set activeTab = null here to ensure the UI shows "Invalid URL"
+        activeTab = null;
+        await currentActivityItem.setValue(null);
         return;
       }
 
@@ -350,11 +364,13 @@ export default defineBackground(() => {
       // Persist to storage so popup can read it directly
       await currentActivityItem.setValue({ domain, url: tab.url, startTime });
 
-      // Short-content signal (Shorts, Reels, etc.) — still triggers immediately
-      const shortEvent = trackShortContent(domain, tab.url);
-      if (shortEvent) {
-        console.log(`[MM Event] short_content on ${domain}`);
-        pendingEvents.push(shortEvent);
+      // Short-content signal (Shorts, Reels, etc.) — only when not paused
+      if (!isSessionPaused) {
+        const shortEvent = trackShortContent(domain, tab.url);
+        if (shortEvent) {
+          console.log(`[MM Event] short_content on ${domain}`);
+          pendingEvents.push(shortEvent);
+        }
       }
     } catch {
       // Tab may have been closed between activation and get
@@ -379,6 +395,9 @@ export default defineBackground(() => {
         changeInfo.url.startsWith("chrome-extension://") ||
         changeInfo.url.startsWith("edge://")
       ) {
+        if (activeTab && activeTab.tabId === tab.id) {
+          await finalizeActiveTab();
+        }
         return;
       }
 
@@ -409,6 +428,21 @@ export default defineBackground(() => {
             startTime: activeTab.startTime,
           });
         }
+      } else if (!activeTab && tab.active) {
+        // If activeTab is null (e.g., navigated from chrome://newtab), initialize it
+        const startTime = Date.now();
+        activeTab = {
+          tabId: tab.id,
+          domain,
+          url: changeInfo.url,
+          startTime,
+          pausedTime: 0,
+        };
+        await currentActivityItem.setValue({
+          domain,
+          url: changeInfo.url,
+          startTime,
+        });
       }
     }
 
@@ -423,27 +457,33 @@ export default defineBackground(() => {
         tab.url.startsWith("chrome-extension://") ||
         tab.url.startsWith("edge://")
       ) {
+        if (activeTab && activeTab.tabId === tab.id) {
+          await finalizeActiveTab();
+        }
         return;
       }
 
-      // Overlay for unclassified domains (first visit per session) - reduced delay
-      if (
-        !educationalDomains.has(domain) &&
-        !overlayPromptedDomains.has(domain)
-      ) {
-        overlayPromptedDomains.add(domain);
-        setTimeout(async () => {
-          if (tab.id) {
-            await maybeShowOverlayForClassification(tab.id, domain);
-          }
-        }, 500); // Reduced from 2000ms to 500ms
-      }
+      // Skip overlay and event generation when paused
+      if (!isSessionPaused) {
+        // Overlay for unclassified domains (first visit per session) - reduced delay
+        if (
+          !educationalDomains.has(domain) &&
+          !overlayPromptedDomains.has(domain)
+        ) {
+          overlayPromptedDomains.add(domain);
+          setTimeout(async () => {
+            if (tab.id) {
+              await maybeShowOverlayForClassification(tab.id, domain);
+            }
+          }, 500); // Reduced from 2000ms to 500ms
+        }
 
-      // Short-content behavioral event
-      const shortEvent = trackShortContent(domain, tab.url);
-      if (shortEvent) {
-        console.log(`[MM Event] short_content (nav) on ${domain}`);
-        pendingEvents.push(shortEvent);
+        // Short-content behavioral event
+        const shortEvent = trackShortContent(domain, tab.url);
+        if (shortEvent) {
+          console.log(`[MM Event] short_content (nav) on ${domain}`);
+          pendingEvents.push(shortEvent);
+        }
       }
     }
   });
@@ -461,6 +501,18 @@ export default defineBackground(() => {
       case "END_SESSION": {
         console.log("[MM Session] Ending session (user requested)");
         await handleEndSession();
+        return { ok: true };
+      }
+
+      case "PAUSE_SESSION": {
+        console.log("[MM Session] Pausing session");
+        await handlePauseSession();
+        return { ok: true };
+      }
+
+      case "RESUME_SESSION": {
+        console.log("[MM Session] Resuming session");
+        await handleResumeSession();
         return { ok: true };
       }
 
@@ -495,6 +547,9 @@ export default defineBackground(() => {
           activityLog: session.activityLog,
           lastScoreDelta: session.lastScoreDelta,
           isSessionActive: session.isSessionActive,
+          isSessionPaused: session.isSessionPaused ?? false,
+          sessionPausedAt: session.sessionPausedAt ?? 0,
+          totalSessionPausedMs: session.totalSessionPausedMs ?? 0,
           focusTimeline: session.focusTimeline,
         };
       }
@@ -521,9 +576,13 @@ export default defineBackground(() => {
   browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name !== "monkeyMeterAggregation") return;
 
-    // Skip aggregation if no active session
+    // Skip aggregation if no active session or if paused
     const sessionCheck = await loadSession();
     if (!sessionCheck.isSessionActive) return;
+    if (isSessionPaused) {
+      console.log("[MM Alarm] Session paused — skipping aggregation");
+      return;
+    }
 
     // ── Inject interim dwell event for the currently active tab ──
     // This ensures the score updates live while the user is still on a drifting site,
@@ -695,6 +754,7 @@ export default defineBackground(() => {
     overlayPromptedDomains.clear();
     activeTab = null;
     isUserIdle = false;
+    isSessionPaused = false;
     lastPauseTime = 0;
 
     // Initialize activeTab from the currently focused tab
@@ -742,11 +802,84 @@ export default defineBackground(() => {
     // Reset in-memory state
     pendingEvents = [];
     activeTab = null;
+    isSessionPaused = false;
     lastPauseTime = 0;
 
     // Clear badge to indicate no active session
     await browser.action.setBadgeText({ text: "" });
 
     console.log("[MM Session] Session ended");
+  }
+
+  /** Pause the session — freezes scoring but keeps activity tracking alive */
+  async function handlePauseSession() {
+    // Set in-memory flag FIRST (synchronous — immediately stops event generation)
+    isSessionPaused = true;
+
+    // Persist to storage (for popup timer display and SW restart recovery)
+    await storagePauseSession();
+
+    // Log a pause entry in the activity log
+    const session = await loadSession();
+    session.activityLog.push({
+      message: "Session paused",
+      timestamp: Date.now(),
+      type: "idle",
+      domain: "system",
+    });
+    await saveSession(session);
+
+    // DON'T call finalizeActiveTab() — keep activeTab and currentActivityItem alive
+    // so the popup's "Currently" card keeps showing what the user is doing
+
+    // Update badge to show paused indicator
+    await browser.action.setBadgeText({ text: "⏸" });
+    await browser.action.setBadgeBackgroundColor({ color: "#78716c" });
+
+    console.log(
+      "[MM Session] Session paused — scoring frozen, activity tracking continues",
+    );
+  }
+
+  /** Resume a paused session — restarts scoring from current state */
+  async function handleResumeSession() {
+    // Persist to storage FIRST (accumulates paused time correctly)
+    await storageResumeSession();
+
+    // Set in-memory flag (re-enables event generation)
+    isSessionPaused = false;
+
+    // Log a resume entry in the activity log
+    const resumeSession = await loadSession();
+    resumeSession.activityLog.push({
+      message: "Session resumed",
+      timestamp: Date.now(),
+      type: "resume",
+      domain: "system",
+    });
+    await saveSession(resumeSession);
+
+    // Reset activeTab's dwell start time so we don't count paused time as dwell
+    if (activeTab) {
+      activeTab.startTime = Date.now();
+      activeTab.pausedTime = 0;
+      await currentActivityItem.setValue({
+        domain: activeTab.domain,
+        url: activeTab.url,
+        startTime: activeTab.startTime,
+      });
+    }
+
+    // Restore badge with current score
+    const session = await loadSession();
+    const focusScore = Math.max(
+      0,
+      Math.min(100, 100 - Math.round(session.smoothedScore)),
+    );
+    const display = getStateDisplay(session.currentState);
+    await browser.action.setBadgeText({ text: `${focusScore}` });
+    await browser.action.setBadgeBackgroundColor({ color: display.color });
+
+    console.log("[MM Session] Session resumed — scoring active");
   }
 });

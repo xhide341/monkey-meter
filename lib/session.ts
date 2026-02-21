@@ -6,20 +6,17 @@ import { loadSession, saveSession } from './storage';
 
 /**
  * Add new events to the session and run aggregation.
- * Events older than 1h are pruned. Short-content events are escalated if sustained.
+ * Merges new events, prunes those older than 1h, and escalates short-content weights if sustained.
  */
 export async function addEventsAndAggregate(newEvents: BehavioralEvent[]): Promise<SessionData> {
     const session = await loadSession();
     const now = Date.now();
 
-    // Merge new events
     session.events.push(...newEvents);
 
-    // Prune events older than the largest window (1h)
     const cutoff1h = now - TIME_WINDOWS['1h'];
     session.events = session.events.filter((e) => e.timestamp > cutoff1h);
 
-    // Escalate short-content weight if there's a sustained pattern within 1h
     escalateShortContentIfSustained(session, now);
 
     saveSession(session);

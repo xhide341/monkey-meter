@@ -14,15 +14,15 @@ const STATE_ORDER: MonkeyState[] = [
 
 /**
  * Determine the target monkey state based on the smoothed score.
- * Uses hysteresis: a state transition only occurs if the score crosses
- * the threshold by at least STATE_HYSTERESIS points, preventing rapid oscillation.
+ * Finds the highest state whose threshold the score exceeds, and applies hysteresis:
+ * a state transition (escalating or de-escalating) only occurs if the score crosses
+ * the target threshold by at least STATE_HYSTERESIS points, preventing rapid oscillation.
  */
 export function computeMonkeyState(session: SessionData): MonkeyState {
     const score = session.smoothedScore;
     const currentState = session.currentState;
     const currentIndex = STATE_ORDER.indexOf(currentState);
 
-    // Find the highest state whose threshold the score exceeds
     let targetIndex = 0;
     for (let i = STATE_ORDER.length - 1; i >= 0; i--) {
         if (score >= STATE_THRESHOLDS[STATE_ORDER[i]]) {
@@ -31,9 +31,7 @@ export function computeMonkeyState(session: SessionData): MonkeyState {
         }
     }
 
-    // Apply hysteresis: only transition if delta exceeds margin
     if (targetIndex > currentIndex) {
-        // Escalating — require score to be above threshold + hysteresis
         const escalationThreshold = STATE_THRESHOLDS[STATE_ORDER[targetIndex]] + STATE_HYSTERESIS;
         if (score >= escalationThreshold) {
             return STATE_ORDER[targetIndex];
@@ -42,7 +40,6 @@ export function computeMonkeyState(session: SessionData): MonkeyState {
     }
 
     if (targetIndex < currentIndex) {
-        // De-escalating — require score to be below threshold - hysteresis
         const deescThreshold = STATE_THRESHOLDS[currentState] - STATE_HYSTERESIS;
         if (score < deescThreshold) {
             return STATE_ORDER[targetIndex];
@@ -64,7 +61,7 @@ export function getStateDisplay(state: MonkeyState): {
         curious: { label: 'Curious', emoji: '🐒', color: '#facc15' },
         distracted: { label: 'Distracted', emoji: '🙈', color: '#fb923c' },
         doom_mode: { label: 'Doom Mode', emoji: '🙊', color: '#f87171' },
-        chaos: { label: 'Chaos', emoji: '🐵💥', color: '#ef4444' },
+        chaos: { label: 'Chaos', emoji: '🐵', color: '#ef4444' },
     };
     return displays[state];
 }

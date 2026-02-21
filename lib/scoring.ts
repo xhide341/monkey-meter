@@ -8,6 +8,7 @@ import { saveSession } from './storage';
 /**
  * Compute the raw autopilot score for a set of events.
  * Uses event-count-based scoring scaled per window, not density-per-hour.
+ * Score is calculated as (total weight / cap) × 100, clamped to 0–100.
  *
  * Each window has a different "expected event cap" — the number of weighted
  * events that would represent 100% autopilot. This prevents short windows
@@ -30,7 +31,6 @@ function computeRawScore(events: BehavioralEvent[], windowKey: string): number {
     const totalWeight = events.reduce((sum, e) => sum + e.weight, 0);
     const cap = WINDOW_EVENT_CAPS[windowKey] ?? 10;
 
-    // Score = (total weight / cap) × 100, clamped to 0–100
     const raw = (totalWeight / cap) * 100;
 
     console.log(
@@ -59,6 +59,7 @@ function determineTrend(
  * 2. Compare against previous scores for trend
  * 3. Apply EMA smoothing to 5m score for state machine input
  * 4. Persist updated scores to session
+ * 5. Track score delta for live points display in the popup
  */
 export async function computeAllScores(session: SessionData): Promise<SessionData> {
     const windows: Array<'5m' | '25m' | '1h'> = ['5m', '25m', '1h'];
@@ -81,12 +82,10 @@ export async function computeAllScores(session: SessionData): Promise<SessionDat
 
     session.scores = updatedScores;
 
-    // Apply EMA smoothing to the 5m score (primary input for state machine — most responsive)
     const fiveMinScore = updatedScores.find((s) => s.window === '5m')!.score;
     const previousSmoothed = session.smoothedScore;
     session.smoothedScore = computeEMA(previousSmoothed, fiveMinScore);
 
-    // Track score delta for live points display in the popup
     session.lastScoreDelta = Math.round(session.smoothedScore) - Math.round(previousSmoothed);
 
     console.log(

@@ -21,9 +21,9 @@ export default defineContentScript({
     classifyPageContent(domain);
 
     /**
-     * Check page title, meta description, and keywords for
-     * educational signals. If found, notify the background so
-     * it can discount drift events for this domain.
+     * Check page title, meta description, and keywords for educational signals
+     * by combining all metadata into one searchable string.
+     * If found, notify the background to discount drift events for this domain.
      * Only sends one notification per content script instance.
      */
     function classifyPageContent(domain: string) {
@@ -46,7 +46,6 @@ export default defineContentScript({
           ?.getAttribute("content")
           ?.toLowerCase() ?? "";
 
-      // Combine all metadata into one searchable string
       const combined = `${title} ${metaDesc} ${metaKeywords} ${ogTitle}`;
 
       const matchedKeyword = EDUCATIONAL_KEYWORDS.find((kw) =>
@@ -66,23 +65,24 @@ export default defineContentScript({
       }
     }
 
-    // ── URL change detection (primary drift signal) ──
-    // Tracks how often the URL changes within a rolling window.
-    // SPA sites like YouTube change URLs without full page loads.
+    /**
+     * Track how often the URL changes within a rolling window as a primary drift signal.
+     * Polls every 1 second to handle SPA sites (pushState/replaceState). On change:
+     * records the navigation timestamp, prunes old timestamps outside the rolling window,
+     * checks for short content, re-classifies educational content after a small delay,
+     * and notifies background if the rapid navigation threshold is met.
+     */
     let lastUrl = window.location.href;
     const navTimestamps: number[] = [];
 
-    // Poll for URL changes every 1 second (handles pushState/replaceState SPAs)
     const urlCheckInterval = ctx.setInterval(() => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
         const now = Date.now();
 
-        // Record this navigation timestamp
         navTimestamps.push(now);
 
-        // Prune timestamps outside the rolling window
         const cutoff = now - RAPID_NAV_WINDOW_MS;
         while (navTimestamps.length > 0 && navTimestamps[0] < cutoff) {
           navTimestamps.shift();
@@ -92,16 +92,12 @@ export default defineContentScript({
           `[MM Content] URL changed (${navTimestamps.length} navs in ${RAPID_NAV_WINDOW_MS / 1000}s): ${currentUrl}`,
         );
 
-        // Check for short content on new URL
         if (isShortContent(currentUrl)) {
           console.log(`[MM Content] Short content detected: ${currentUrl}`);
         }
 
-        // Re-classify educational content on URL change
-        // Use a small delay to let the page title update
         setTimeout(() => classifyPageContent(domain), 1500);
 
-        // If rapid navigation threshold met, notify background
         if (navTimestamps.length >= RAPID_NAV_THRESHOLD) {
           console.log(
             `[MM Content] Rapid navigation detected: ${navTimestamps.length} URL changes in ${RAPID_NAV_WINDOW_MS / 1000}s`,
@@ -122,9 +118,13 @@ export default defineContentScript({
       }
     });
 
-    /** Inject the reflective overlay into the page */
+    /** 
+     * Inject the reflective overlay into the page if one does not already exist.
+     * Applies inline styles to avoid CSS conflicts with the host page, handles slide-in
+     * animation, configures action buttons with fade-out removal, and sets an auto-dismiss
+     * timeout of 15 seconds.
+     */
     function showReflectiveOverlay(score: number, domain: string) {
-      // Prevent duplicate overlays
       if (document.getElementById("mm-overlay")) return;
 
       const overlay = document.createElement("div");
@@ -148,18 +148,15 @@ export default defineContentScript({
         </div>
       `;
 
-      // Apply inline styles (avoid host page CSS conflicts)
       applyOverlayStyles(overlay);
 
       document.body.appendChild(overlay);
 
-      // Slide-in animation
       requestAnimationFrame(() => {
         const card = overlay.querySelector(".mm-overlay-card") as HTMLElement;
         if (card) card.style.transform = "translateX(0)";
       });
 
-      // Button handlers
       overlay.querySelectorAll(".mm-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           const action = (e.currentTarget as HTMLElement).dataset
@@ -171,13 +168,11 @@ export default defineContentScript({
             domain,
           } satisfies ExtensionMessage);
 
-          // Fade out and remove
           overlay.style.opacity = "0";
           setTimeout(() => overlay.remove(), 300);
         });
       });
 
-      // Auto-dismiss after 15 seconds
       setTimeout(() => {
         if (overlay.parentNode) {
           overlay.style.opacity = "0";
