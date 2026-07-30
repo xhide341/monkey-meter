@@ -40,6 +40,9 @@ function defaultSession(): SessionData {
     preferences: {
       suppressedDomains: [],
       overlayEnabled: true,
+      showActivityLogPoints: true,
+      showSessionTrend: true,
+      showCurrentActivity: true,
       intentionalSessions: {},
     },
     smoothedScore: 0,
@@ -160,7 +163,7 @@ export async function markIntentional(domain: string): Promise<void> {
   await saveSession(session);
 }
 
-/** 
+/**
  * Check if a domain is currently marked intentional.
  * Validates against expiry time and automatically cleans up expired sessions.
  */
@@ -174,4 +177,34 @@ export async function isIntentional(domain: string): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+/** Set whether the Activity Log should display point badges */
+export async function setShowActivityLogPoints(
+  visible: boolean,
+): Promise<void> {
+  const session = await loadSession();
+  session.preferences.showActivityLogPoints = visible;
+  await saveSession(session);
+}
+
+/** Set whether the Dashboard should display the Session Trend card */
+export async function setShowSessionTrend(visible: boolean): Promise<void> {
+  const session = await loadSession();
+  session.preferences.showSessionTrend = visible;
+  await saveSession(session);
+}
+
+/** Set whether the Dashboard should display the Current Activity card */
+export async function setShowCurrentActivity(visible: boolean): Promise<void> {
+  const session = await loadSession();
+  session.preferences.showCurrentActivity = visible;
+  await saveSession(session);
+}
+
+/** Set whether popup nudges/overlays are globally enabled */
+export async function setOverlayEnabled(enabled: boolean): Promise<void> {
+  const session = await loadSession();
+  session.preferences.overlayEnabled = enabled;
+  await saveSession(session);
 }

@@ -1,4 +1,4 @@
-# 🐒 MonkeyMeter
+# 🐒 Capuchin
 
 **Is the monkey driving?**
 
@@ -28,6 +28,7 @@ npm run build
 ```
 
 ### Loading the Extension (Unpacked)
+
 Whether you use `npm run dev` or `npm run build`, the compiled extension will be generated in the `.output` directory. You can use this directory to manually load the extension:
 
 1. Open your browser's extension page (e.g., `chrome://extensions`).

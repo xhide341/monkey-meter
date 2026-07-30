@@ -4,10 +4,10 @@ export default function AboutTab() {
       {/* What is MonkeyMeter */}
       <div className="about-card">
         <div className="about-card-header">
-          <h3 className="about-card-title">What is MonkeyMeter?</h3>
+          <h3 className="about-card-title">What is Capuchin?</h3>
         </div>
         <p className="about-card-text">
-          MonkeyMeter is a <strong>mindful browsing companion</strong> that
+          Capuchin is a <strong>mindful browsing companion</strong> that
           gently tracks your focus patterns. It detects autopilot doom-scrolling
           and nudges you back to intentional browsing — without blocking
           anything.
@@ -32,7 +32,9 @@ export default function AboutTab() {
           >
             Tim Urban's legendary TED talk
           </a>{" "}
-          about the instant gratification monkey. It brilliantly explains how, in moments of distraction, our inner monkey takes over the wheel in our brain and steers us away from our actual goals.
+          about the instant gratification monkey. It brilliantly explains how in
+          moments of distraction, our inner monkey takes over the wheel in our
+          brain and steers us away from our actual goals.
         </p>
       </div>
 
@@ -47,8 +49,8 @@ export default function AboutTab() {
             <div className="about-list-content">
               <strong>Signal Detection</strong>
               <span>
-                Monitors tab switches and time-on-page to
-                detect mindless patterns.
+                Monitors tab switches and time-on-page to detect mindless
+                patterns.
               </span>
             </div>
           </div>
@@ -67,8 +69,8 @@ export default function AboutTab() {
             <div className="about-list-content">
               <strong>State Machine</strong>
               <span>
-                Your score maps to a monkey state — from 🧘 Focused to 🙈 Chaos
-                — with smooth transitions and hysteresis to avoid flapping.
+                Your score maps to a monkey state from focused to chaos, with
+                smooth transitions and hysteresis to avoid flapping.
               </span>
             </div>
           </div>
@@ -77,15 +79,13 @@ export default function AboutTab() {
             <div className="about-list-content">
               <strong>Gentle Nudges</strong>
               <span>
-                When drift is detected, a non-blocking overlay lets you choose:
-                continue intentionally, embrace monkey mode, or dismiss.
+                When drift is detected, a non-blocking overlay at the bottom
+                right asks if what you are browsing is intentional.
               </span>
             </div>
           </div>
         </div>
       </div>
-
-
 
       {/* Privacy */}
       <div className="about-card">

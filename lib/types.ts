@@ -72,6 +72,12 @@ export interface UserPreferences {
   suppressedDomains: string[];
   /** Whether overlay prompts are enabled globally */
   overlayEnabled: boolean;
+  /** Whether point badges are shown in the Activity Log */
+  showActivityLogPoints: boolean;
+  /** Whether the Session Trend card is visible on the Dashboard */
+  showSessionTrend: boolean;
+  /** Whether the Current Activity card is visible on the Dashboard */
+  showCurrentActivity: boolean;
   /** Active intentional sessions per domain (timestamp of when they started) */
   intentionalSessions: Record<string, number>;
 }
@@ -112,6 +118,10 @@ export type ExtensionMessage =
   | { type: "OVERLAY_RESPONSE"; response: OverlayResponse; domain: string }
   | { type: "RAPID_NAVIGATION"; domain: string; navCount: number }
   | { type: "PAGE_EDUCATIONAL"; domain: string; title: string }
+  | { type: "SET_OVERLAY_ENABLED"; enabled: boolean }
+  | { type: "SET_LOG_POINT_VISIBILITY"; visible: boolean }
+  | { type: "SET_SESSION_TREND_VISIBILITY"; visible: boolean }
+  | { type: "SET_CURRENT_ACTIVITY_VISIBILITY"; visible: boolean }
   | { type: "GET_SCORES" }
   | { type: "SCORES_UPDATE"; scores: AutopilotScore[]; state: MonkeyState }
   | { type: "START_SESSION" }

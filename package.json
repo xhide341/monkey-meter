@@ -1,5 +1,5 @@
 {
-  "name": "monkey-meter",
+  "name": "capuchin",
   "description": "Detect autopilot browsing drift with behavioral signals and reflective prompts.",
   "private": true,
   "version": "1.0.0",

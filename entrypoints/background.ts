@@ -16,6 +16,10 @@ import {
   isDomainSuppressed,
   suppressDomain,
   markIntentional,
+  setOverlayEnabled,
+  setShowActivityLogPoints,
+  setShowSessionTrend,
+  setShowCurrentActivity,
   currentActivityItem,
   startSession as storageStartSession,
   endSession as storageEndSession,
@@ -211,7 +215,9 @@ export default defineBackground(() => {
       const retroactivePause = Math.min(idleThresholdMs, tabOpenDuration);
       activeTab.pausedTime += retroactivePause;
 
-      console.log(`[MM Idle] User went idle, retroactive pause added: ${retroactivePause}ms`);
+      console.log(
+        `[MM Idle] User went idle, retroactive pause added: ${retroactivePause}ms`,
+      );
       await pushLog(
         "idle",
         "Idle detected — pausing drift tracking",
@@ -463,21 +469,8 @@ export default defineBackground(() => {
         return;
       }
 
-      // Skip overlay and event generation when paused
+      // Skip event generation when paused
       if (!isSessionPaused) {
-        // Overlay for unclassified domains (first visit per session) - reduced delay
-        if (
-          !educationalDomains.has(domain) &&
-          !overlayPromptedDomains.has(domain)
-        ) {
-          overlayPromptedDomains.add(domain);
-          setTimeout(async () => {
-            if (tab.id) {
-              await maybeShowOverlayForClassification(tab.id, domain);
-            }
-          }, 500); // Reduced from 2000ms to 500ms
-        }
-
         // Short-content behavioral event
         const shortEvent = trackShortContent(domain, tab.url);
         if (shortEvent) {
@@ -545,6 +538,11 @@ export default defineBackground(() => {
           smoothedScore: session.smoothedScore,
           sessionStartedAt: session.sessionStartedAt,
           activityLog: session.activityLog,
+          overlayEnabled: session.preferences.overlayEnabled ?? true,
+          showActivityLogPoints:
+            session.preferences.showActivityLogPoints ?? true,
+          showSessionTrend: session.preferences.showSessionTrend ?? true,
+          showCurrentActivity: session.preferences.showCurrentActivity ?? true,
           lastScoreDelta: session.lastScoreDelta,
           isSessionActive: session.isSessionActive,
           isSessionPaused: session.isSessionPaused ?? false,
@@ -552,6 +550,26 @@ export default defineBackground(() => {
           totalSessionPausedMs: session.totalSessionPausedMs ?? 0,
           focusTimeline: session.focusTimeline,
         };
+      }
+
+      case "SET_OVERLAY_ENABLED": {
+        await setOverlayEnabled(message.enabled);
+        return { ok: true };
+      }
+
+      case "SET_LOG_POINT_VISIBILITY": {
+        await setShowActivityLogPoints(message.visible);
+        return { ok: true };
+      }
+
+      case "SET_SESSION_TREND_VISIBILITY": {
+        await setShowSessionTrend(message.visible);
+        return { ok: true };
+      }
+
+      case "SET_CURRENT_ACTIVITY_VISIBILITY": {
+        await setShowCurrentActivity(message.visible);
+        return { ok: true };
       }
 
       case "PAGE_EDUCATIONAL": {
@@ -667,55 +685,16 @@ export default defineBackground(() => {
     }
   });
 
-  /** Show overlay for domain classification on first visit to unclassified domain */
-  async function maybeShowOverlayForClassification(
-    tabId: number,
-    domain: string,
-  ) {
-    const now = Date.now();
-    if (now - lastOverlayTime < OVERLAY_COOLDOWN_MS) return;
-
-    const suppressed = await isDomainSuppressed(domain);
-    if (suppressed) return;
-
-    lastOverlayTime = now;
-    const session = await loadSession();
-    console.log(
-      `[MM Overlay] Classification prompt for ${domain} (score=${session.smoothedScore.toFixed(1)})`,
-    );
-
-    try {
-      await browser.tabs.sendMessage(tabId, {
-        type: "SHOW_OVERLAY",
-        score: session.smoothedScore,
-      } satisfies ExtensionMessage);
-    } catch (err) {
-      console.warn(
-        "[MM Overlay] Failed to send classification overlay (attempt 1), retrying...",
-        err,
-      );
-      // Retry once after a short delay (content script might be loading)
-      setTimeout(async () => {
-        try {
-          await browser.tabs.sendMessage(tabId, {
-            type: "SHOW_OVERLAY",
-            score: session.smoothedScore,
-          } satisfies ExtensionMessage);
-        } catch (retryErr) {
-          console.error(
-            "[MM Overlay] Failed to send classification overlay (attempt 2):",
-            retryErr,
-          );
-        }
-      }, 1000);
-    }
-  }
-
   /** Send overlay trigger to the active tab's content script (score-based, with cooldown) */
   async function maybeShowOverlay(score: number) {
     const now = Date.now();
     if (now - lastOverlayTime < OVERLAY_COOLDOWN_MS) {
       console.log(`[MM Overlay] Skipped — cooldown active`);
+      return;
+    }
+
+    const session = await loadSession();
+    if (session.preferences.overlayEnabled === false) {
       return;
     }
 
@@ -751,7 +730,6 @@ export default defineBackground(() => {
     const session = await storageStartSession();
     pendingEvents = [];
     lastOverlayTime = 0;
-    overlayPromptedDomains.clear();
     activeTab = null;
     isUserIdle = false;
     isSessionPaused = false;

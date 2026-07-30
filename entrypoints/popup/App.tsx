@@ -12,13 +12,14 @@ import StartScreen from "./components/StartScreen";
 import Dashboard from "./components/Dashboard";
 import ActivityLog from "./components/ActivityLog";
 import AboutTab from "./components/AboutTab";
+import SettingsTab from "./components/SettingsTab";
 import Footer from "./components/Footer";
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [activity, setActivity] = useState<CurrentActivity | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "activity" | "about"
+    "dashboard" | "activity" | "settings" | "about"
   >("dashboard");
   const [busy, setBusy] = useState(false);
 
@@ -40,7 +41,6 @@ export default function App() {
   }, [refresh]);
 
   // ── Actions ──
-
   const startSession = async () => {
     if (busy) return;
     setBusy(true);
@@ -83,9 +83,86 @@ export default function App() {
     }
   };
 
+  const toggleActivityLogPoints = async (visible: boolean) => {
+    if (!session) return;
+
+    setSession((prev) =>
+      prev ? { ...prev, showActivityLogPoints: visible } : prev,
+    );
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SET_LOG_POINT_VISIBILITY",
+        visible,
+      });
+    } catch (err) {
+      console.error("[MM Popup] Failed to update log-point visibility:", err);
+      await refresh();
+    }
+  };
+
+  const toggleEnablePopupNudges = async (enabled: boolean) => {
+    if (!session) return;
+
+    setSession((prev) => (prev ? { ...prev, overlayEnabled: enabled } : prev));
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SET_OVERLAY_ENABLED",
+        enabled,
+      });
+    } catch (err) {
+      console.error("[MM Popup] Failed to update overlay nudge setting:", err);
+      await refresh();
+    }
+  };
+
+  const toggleSessionTrend = async (visible: boolean) => {
+    if (!session) return;
+
+    setSession((prev) =>
+      prev ? { ...prev, showSessionTrend: visible } : prev,
+    );
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SET_SESSION_TREND_VISIBILITY",
+        visible,
+      });
+    } catch (err) {
+      console.error(
+        "[MM Popup] Failed to update session-trend visibility:",
+        err,
+      );
+      await refresh();
+    }
+  };
+
+  const toggleCurrentActivity = async (visible: boolean) => {
+    if (!session) return;
+
+    setSession((prev) =>
+      prev ? { ...prev, showCurrentActivity: visible } : prev,
+    );
+
+    try {
+      await browser.runtime.sendMessage({
+        type: "SET_CURRENT_ACTIVITY_VISIBILITY",
+        visible,
+      });
+    } catch (err) {
+      console.error(
+        "[MM Popup] Failed to update current-activity visibility:",
+        err,
+      );
+      await refresh();
+    }
+  };
+
   // ── Render ──
 
   const isActive = session?.isSessionActive ?? false;
+  const showFooter = !isActive || activeTab !== "dashboard";
 
   return (
     <div className={`popup-container ${isActive ? "active-session" : ""}`}>
@@ -102,6 +179,8 @@ export default function App() {
               <Dashboard
                 session={session}
                 activity={activity}
+                showSessionTrend={session.showSessionTrend}
+                showCurrentActivity={session.showCurrentActivity}
                 busy={busy}
                 onPauseToggle={togglePause}
                 onEnd={endSession}
@@ -109,8 +188,25 @@ export default function App() {
             </div>
           )}
           {activeTab === "activity" && (
+            <div className="tab-content tab-content-activity active">
+              <ActivityLog
+                entries={session.activityLog}
+                showPoints={session.showActivityLogPoints}
+              />
+            </div>
+          )}
+          {activeTab === "settings" && (
             <div className="tab-content active">
-              <ActivityLog entries={session.activityLog} />
+              <SettingsTab
+                enablePopupNudges={session.overlayEnabled}
+                showActivityLogPoints={session.showActivityLogPoints}
+                showSessionTrend={session.showSessionTrend}
+                showCurrentActivity={session.showCurrentActivity}
+                onEnablePopupNudgesChange={toggleEnablePopupNudges}
+                onShowActivityLogPointsChange={toggleActivityLogPoints}
+                onShowSessionTrendChange={toggleSessionTrend}
+                onShowCurrentActivityChange={toggleCurrentActivity}
+              />
             </div>
           )}
           {activeTab === "about" && (
@@ -121,7 +217,7 @@ export default function App() {
         </>
       )}
 
-      <Footer />
+      {showFooter && <Footer />}
     </div>
   );
 }

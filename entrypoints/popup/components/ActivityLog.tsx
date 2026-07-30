@@ -4,10 +4,36 @@ import { getLogIcon, formatAbsoluteTime } from "../helpers";
 
 interface ActivityLogProps {
   entries: LogEntry[];
+  showPoints?: boolean;
 }
 
-export default function ActivityLog({ entries }: ActivityLogProps) {
+export default function ActivityLog({
+  entries,
+  showPoints = true,
+}: ActivityLogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const renderLogMessage = (entry: LogEntry) => {
+    const domain = entry.domain?.trim();
+    if (!domain || domain === "system") return entry.message;
+
+    const messageLower = entry.message.toLowerCase();
+    const domainLower = domain.toLowerCase();
+    const domainStart = messageLower.indexOf(domainLower);
+
+    if (domainStart === -1) return entry.message;
+
+    const domainEnd = domainStart + domain.length;
+    return (
+      <>
+        {entry.message.slice(0, domainStart)}
+        <span className="log-domain-highlight">
+          {entry.message.slice(domainStart, domainEnd)}
+        </span>
+        {entry.message.slice(domainEnd)}
+      </>
+    );
+  };
 
   // Auto-scroll to bottom on mount / new entries
   useEffect(() => {
@@ -48,13 +74,13 @@ export default function ActivityLog({ entries }: ActivityLogProps) {
               )}
             </div>
 
-            <span className="log-message">{entry.message}</span>
+            <span className="log-message">{renderLogMessage(entry)}</span>
 
             <div className="log-meta">
               <span className="log-time">
                 {formatAbsoluteTime(entry.timestamp)}
               </span>
-              {entry.weight != null && entry.weight > 0 && (
+              {showPoints && entry.weight != null && entry.weight > 0 && (
                 <span className="log-weight">
                   +{Number.parseFloat(entry.weight.toFixed(2))}
                 </span>

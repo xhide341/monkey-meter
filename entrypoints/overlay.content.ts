@@ -118,39 +118,41 @@ export default defineContentScript({
       }
     });
 
-    /** 
+    /**
      * Inject the reflective overlay into the page if one does not already exist.
      * Applies inline styles to avoid CSS conflicts with the host page, handles slide-in
      * animation, configures action buttons with fade-out removal, and sets an auto-dismiss
      * timeout of 15 seconds.
      */
     function showReflectiveOverlay(score: number, domain: string) {
-      if (document.getElementById("mm-overlay")) return;
+      if (document.getElementById("mm-overlay-host")) return;
+
+      const host = document.createElement("div");
+      host.id = "mm-overlay-host";
+      const shadowRoot = host.attachShadow({ mode: "open" });
 
       const overlay = document.createElement("div");
       overlay.id = "mm-overlay";
       overlay.innerHTML = `
         <div class="mm-overlay-card">
-          <div class="mm-overlay-icon">🐵</div>
           <div class="mm-overlay-text">Are we here on purpose?</div>
           <div class="mm-overlay-score">Autopilot Score: ${Math.round(score)}%</div>
           <div class="mm-overlay-buttons">
             <button class="mm-btn mm-btn-intentional" data-action="intentional">
-              ✅ Intentional
+              Intentional
             </button>
             <button class="mm-btn mm-btn-monkey" data-action="monkey_mode">
-              🐒 Monkey Mode
-            </button>
-            <button class="mm-btn mm-btn-suppress" data-action="dont_ask_again">
-              🔇 Don't Ask Again
+              Monkey Mode
             </button>
           </div>
         </div>
       `;
 
+      shadowRoot.appendChild(overlay);
+
       applyOverlayStyles(overlay);
 
-      document.body.appendChild(overlay);
+      document.body.appendChild(host);
 
       requestAnimationFrame(() => {
         const card = overlay.querySelector(".mm-overlay-card") as HTMLElement;
@@ -169,14 +171,14 @@ export default defineContentScript({
           } satisfies ExtensionMessage);
 
           overlay.style.opacity = "0";
-          setTimeout(() => overlay.remove(), 300);
+          setTimeout(() => host.remove(), 300);
         });
       });
 
       setTimeout(() => {
-        if (overlay.parentNode) {
+        if (host.parentNode) {
           overlay.style.opacity = "0";
-          setTimeout(() => overlay.remove(), 300);
+          setTimeout(() => host.remove(), 300);
         }
       }, 15000);
     }
@@ -205,15 +207,6 @@ export default defineContentScript({
           maxWidth: "320px",
           transform: "translateX(120%)",
           transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
-        });
-      }
-
-      const icon = overlay.querySelector(".mm-overlay-icon") as HTMLElement;
-      if (icon) {
-        Object.assign(icon.style, {
-          fontSize: "32px",
-          marginBottom: "8px",
-          textAlign: "center",
         });
       }
 
@@ -252,14 +245,22 @@ export default defineContentScript({
       overlay.querySelectorAll(".mm-btn").forEach((btn) => {
         const el = btn as HTMLElement;
         Object.assign(el.style, {
+          all: "unset",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          lineHeight: "1",
+          fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
           padding: "10px 16px",
-          border: "none",
-          borderRadius: "10px",
+          border: "0",
+          borderRadius: "12px",
           cursor: "pointer",
           fontSize: "13px",
           fontWeight: "500",
           transition: "all 0.2s ease",
           textAlign: "center",
+          userSelect: "none",
         });
 
         if (el.classList.contains("mm-btn-intentional")) {
@@ -272,21 +273,13 @@ export default defineContentScript({
             background: "linear-gradient(135deg, #92400e, #b45309)",
             color: "#fef3c7",
           });
-        } else if (el.classList.contains("mm-btn-suppress")) {
-          Object.assign(el.style, {
-            background: "rgba(255, 255, 255, 0.06)",
-            color: "#94a3b8",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-          });
         }
 
         el.addEventListener("mouseenter", () => {
           el.style.filter = "brightness(1.2)";
-          el.style.transform = "scale(1.02)";
         });
         el.addEventListener("mouseleave", () => {
           el.style.filter = "brightness(1)";
-          el.style.transform = "scale(1)";
         });
       });
     }

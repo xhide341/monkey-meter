@@ -13,6 +13,10 @@ export interface SessionInfo {
   smoothedScore: number;
   sessionStartedAt: number;
   activityLog: LogEntry[];
+  showActivityLogPoints: boolean;
+  overlayEnabled: boolean;
+  showSessionTrend: boolean;
+  showCurrentActivity: boolean;
   lastScoreDelta: number;
   isSessionActive: boolean;
   isSessionPaused: boolean;
@@ -32,6 +36,10 @@ export async function fetchSessionData(): Promise<SessionInfo> {
         smoothedScore: response.smoothedScore,
         sessionStartedAt: response.sessionStartedAt,
         activityLog: response.activityLog,
+        showActivityLogPoints: response.showActivityLogPoints ?? true,
+        overlayEnabled: response.overlayEnabled ?? true,
+        showSessionTrend: response.showSessionTrend ?? true,
+        showCurrentActivity: response.showCurrentActivity ?? true,
         lastScoreDelta: response.lastScoreDelta,
         isSessionActive: response.isSessionActive ?? false,
         isSessionPaused: response.isSessionPaused ?? false,
@@ -51,6 +59,10 @@ export async function fetchSessionData(): Promise<SessionInfo> {
     smoothedScore: session.smoothedScore,
     sessionStartedAt: session.sessionStartedAt,
     activityLog: session.activityLog,
+    showActivityLogPoints: session.preferences.showActivityLogPoints ?? true,
+    overlayEnabled: session.preferences.overlayEnabled ?? true,
+    showSessionTrend: session.preferences.showSessionTrend ?? true,
+    showCurrentActivity: session.preferences.showCurrentActivity ?? true,
     lastScoreDelta: session.lastScoreDelta,
     isSessionActive: session.isSessionActive,
     isSessionPaused: session.isSessionPaused ?? false,

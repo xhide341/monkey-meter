@@ -1,11 +1,15 @@
 interface TabBarProps {
-  activeTab: "dashboard" | "activity" | "about";
-  onTabChange: (tab: "dashboard" | "activity" | "about") => void;
+  activeTab: "dashboard" | "activity" | "settings" | "about";
+  onTabChange: (tab: "dashboard" | "activity" | "settings" | "about") => void;
 }
 
-const TABS: { id: "dashboard" | "activity" | "about"; label: string }[] = [
+const TABS: {
+  id: "dashboard" | "activity" | "settings" | "about";
+  label: string;
+}[] = [
   { id: "dashboard", label: "Dashboard" },
-  { id: "activity", label: "Activity Log" },
+  { id: "activity", label: "Activity" },
+  { id: "settings", label: "Settings" },
   { id: "about", label: "About" },
 ];
 

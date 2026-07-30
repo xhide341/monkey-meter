@@ -79,7 +79,7 @@ body {
 }
 
 .popup-container.active-session {
-  min-height: 600px;
+  min-height: 100%;
 }
 
 .popup-header {
@@ -96,10 +96,11 @@ body {
 }
 
 .header-subtitle {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.1px;
   display: block;
   margin-top: 2px;
 }
@@ -108,8 +109,8 @@ body {
 .tab-bar {
   display: flex;
   justify-content: center;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .tab-btn {
@@ -119,7 +120,7 @@ body {
   background: transparent;
   color: var(--text-muted);
   font-family: "DM Sans", sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -143,7 +144,12 @@ body {
 
 .tab-content.active {
   display: flex;
-  margin-bottom: 12px;
+}
+
+.tab-content-activity {
+  height: 100%;
+  min-height: 430px;
+  max-height: 100%;
 }
 
 @keyframes fade-in {
@@ -164,7 +170,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
+  padding: 8px 0 16px 0;
   margin-bottom: 12px;
   position: relative;
 }
@@ -252,7 +258,7 @@ body {
 /* ── Dashboard Cards (Boxed Style) ── */
 .dashboard-card {
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-color);
   display: flex;
@@ -315,12 +321,15 @@ body {
 }
 
 .activity-time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--accent-green);
-  font-weight: 700;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.082em;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
 }
-
 
 /* Sparkline Card Internals */
 .sparkline-wrapper {
@@ -416,62 +425,73 @@ body {
   gap: 8px;
   margin-bottom: 12px;
   width: 100%;
+  isolation: isolate;
 }
 
 .control-btn {
-  flex: 1;
+  min-width: 0;
+  height: 40px;
+  color: #fff;
+  padding: 5px 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: none;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 10px 12px;
-  border-radius: 8px;
   font-family: "DM Sans", sans-serif;
   font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  color: var(--text-secondary);
+  outline: none;
+  border-radius: 5px;
+  border: none;
+  background: var(--btn-bg, var(--bg-card));
+  box-shadow: 0 5px var(--btn-shadow, var(--border-color));
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+  contain: paint;
+}
+
+.control-btn.is-pressed {
+  transform: translate3d(0, 5px, 0);
 }
 
 .control-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .control-btn-icon {
-  font-size: 12px;
-  line-height: 1;
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
-/* Pause button — yellow hover */
-.pause-btn:hover {
-  background: rgba(250, 204, 21, 0.1);
-  color: #facc15;
-  border-color: rgba(250, 204, 21, 0.3);
+/* Pause button — yellow by default */
+.pause-btn {
+  flex: 7;
+  --btn-bg: #facc15;
+  --btn-shadow: #ca8a04;
+  color: #1c1917;
 }
 
 /* Resume state — green styling */
 .pause-btn.is-paused {
-  background: rgba(74, 222, 128, 0.1);
-  color: var(--accent-green);
-  border-color: rgba(74, 222, 128, 0.3);
+  --btn-bg: #4ade80;
+  --btn-shadow: #16a34a;
+  color: #1c1917;
 }
 
-.pause-btn.is-paused:hover {
-  background: rgba(74, 222, 128, 0.18);
-  color: var(--accent-green);
-  border-color: rgba(74, 222, 128, 0.45);
-}
-
-/* End button — red hover */
-.end-btn:hover {
-  background: rgba(248, 113, 113, 0.1);
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.3);
+/* End button — red by default */
+.end-btn {
+  flex: 3;
+  --btn-bg: #f87171;
+  --btn-shadow: #b91c1c;
 }
 
 /* ── Activity Log (Tab) ── */
@@ -485,22 +505,25 @@ body {
   padding-right: 4px;
 }
 
+.tab-content-activity .log-container {
+  height: 100%;
+  max-height: 100%;
+}
+
 .log-entry {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px;
-  border-radius: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .log-entry:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .log-entry--drift {
   background: rgba(251, 146, 60, 0.03);
-  /* Extremely subtle orange tint */
 }
 
 .log-icon {
@@ -530,6 +553,11 @@ body {
   text-overflow: ellipsis;
 }
 
+.log-domain-highlight {
+  color: #fff;
+  font-weight: 500;
+}
+
 .log-meta {
   display: flex;
   flex-direction: column;
@@ -538,7 +566,8 @@ body {
 }
 
 .log-time {
-  font-size: 9px;
+  font-size: 11px;
+  font-size: 500;
   color: var(--text-muted);
 }
 
@@ -558,6 +587,93 @@ body {
   justify-content: center;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.activity-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.activity-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.activity-toggle input {
+  accent-color: var(--accent-orange);
+}
+
+.activity-toggle input:disabled {
+  opacity: 0.6;
+}
+
+/* ── Settings Tab ── */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.settings-card {
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settings-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.settings-toggle input {
+  margin-top: 2px;
+  accent-color: var(--accent-orange);
+}
+
+.settings-toggle input:disabled {
+  opacity: 0.6;
+}
+
+.settings-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-toggle-label {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.settings-toggle-help {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 /* ── About Tab ── */
@@ -598,7 +714,7 @@ body {
   margin: 0;
 }
 
-.about-card-text+.about-card-text {
+.about-card-text + .about-card-text {
   margin-top: 10px;
 }
 
@@ -610,7 +726,6 @@ body {
 .about-inline-link {
   color: var(--accent-orange);
   text-decoration: none;
-  border-bottom: 1px solid rgba(251, 146, 60, 0.3);
   transition: all 0.2s ease;
 }
 
@@ -639,7 +754,7 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
+  /* margin-top: 2px; */
 }
 
 .about-list-content {
@@ -672,6 +787,7 @@ body {
 }
 
 .footer-link {
+  margin-top: 8px;
   color: var(--text-muted);
   font-size: 10px;
   text-decoration: none;
@@ -707,7 +823,6 @@ body {
 
 /* Animations - Subtle Only */
 @keyframes pulse-subtle {
-
   0%,
   100% {
     transform: scale(1);
@@ -730,7 +845,6 @@ body {
 
 /* Maybe a tiny wiggle for distracted */
 @keyframes wiggle {
-
   0%,
   100% {
     transform: rotate(0deg);
@@ -783,7 +897,6 @@ body {
 
 .footer-link:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
 }
 
 /* SVG icon placeholders inside footer links */
